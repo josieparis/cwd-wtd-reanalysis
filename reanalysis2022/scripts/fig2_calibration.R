@@ -9,7 +9,7 @@ library(patchwork)
 setwd("<dir>/Seabury_data")
 
 source("reanalysis2022/scripts/fig_theme.R")
-PRNP <- "G96S_G_to_A_at286"; TH <- theme_seabury()
+PRNP <- "G96S_G_to_A_at286"; TH <- theme_seabury(base = 16)
 ## genomic control lambda
 lam <- function(p){ p<-p[is.finite(p)&p>0]; median(qchisq(p,1,lower.tail=FALSE))/qchisq(0.5,1) }
 
@@ -37,17 +37,17 @@ qq_thin <- function(p){
 }
 modname <- c(naive="naive", pc="+10 PCs", grm="single GRM")
 qq_panel <- function(pl, ttl){
-  labs <- vapply(names(pl), function(m) sprintf("%s (λ=%.2f)", modname[m], lam(pl[[m]])), "")
+  labs <- vapply(names(pl), function(m) sprintf("%s (λ = %.2f)", modname[m], lam(pl[[m]])), "")
   d <- map2_dfr(names(pl), labs, function(m,l) qq_thin(pl[[m]]) %>% mutate(model=l)) %>%
     mutate(model=factor(model, levels=labs))
   ggplot(d, aes(exp, obs, color=model)) +
     geom_abline(slope=1, intercept=0, linetype=2, color="grey55") +
     geom_hline(yintercept=-log10(5e-8), linetype=3, color="grey70") +
-    geom_point(size=0.5) +
+    geom_point(size=0.7) +
     scale_color_manual(values=setNames(unname(METHCOL), labs)) +
-    guides(color=guide_legend(override.aes=list(size=2.5))) +
-    labs(x=expression(expected~-log[10](italic(p))), y=expression(observed~-log[10](italic(p))), title=ttl) +
-    TH + theme(legend.position=c(0.03,0.97), legend.justification=c(0,1), legend.text=element_text(size=11.5))
+    guides(color=guide_legend(override.aes=list(size=3.5))) +
+    labs(x=expression(expected~"\u2212"*log[10](italic(p))), y=expression(observed~"\u2212"*log[10](italic(p))), title=ttl) +
+    TH + theme(legend.position=c(0.03,0.97), legend.justification=c(0,1), legend.text=element_text(size=15))
 }
 qa <- qq_panel(list(naive=g20$p_naive, pc=g20$p_pc, grm=g20$p_grm), "2020 dataset") + labs(tag="a")
 qb <- qq_panel(list(naive=g22$p_naive, pc=g22$p_pc, grm=g22$p_grm),   "2022 dataset")
@@ -67,12 +67,13 @@ manh <- function(df, pcol, ttl){
     geom_point(aes(color=factor(chr %% 2)), size=0.45) +
     scale_color_manual(values=c("0"="grey72","1"="grey45"), guide="none") +
     geom_point(data=prnp, color="#b2182b", size=2.6, shape=18) +
-    geom_text(data=prnp, aes(label="PRNP"), vjust=-0.9, color="#b2182b", fontface=3, size=3.4) +
+    geom_text(data=prnp, aes(label="PRNP"), vjust=-0.9, color="#b2182b", fontface=3, size=5) +
     scale_x_continuous(breaks=ax$center, labels=ax$chr, expand=expansion(mult=0.01)) +
-    scale_y_continuous(expand=expansion(mult=c(0,0.12)), limits=c(0, NA)) +
-    labs(x="chromosome", y=expression(-log[10](italic(p))), title=ttl) +
-    TH + theme(panel.grid=element_blank(), axis.text.x=element_text(size=9.5))
+    scale_y_continuous(expand=expansion(mult=c(0,0.05)), limits=c(0, YMAN)) +
+    labs(x="chromosome", y=expression("\u2212"*log[10](italic(p))), title=ttl) +
+    TH + theme(panel.grid=element_blank(), axis.text.x=element_text(size=12))
 }
+YMAN <- 11.5                                             # same y-axis in both Manhattan panels
 mb20 <- manh(g20, "p_grm",   "2020 dataset, single-GRM model") + labs(tag="b")
 mb22 <- manh(g22, "p_grm",   "2022 dataset, single-GRM model")
 
@@ -88,8 +89,8 @@ cc <- cc %>% group_by(model) %>% mutate(tie = n_distinct(count) == 1, hi = count
          vj = case_when(model == "naive" & hi ~ 0.1, model == "naive" ~ 0.9, hi ~ -0.9, TRUE ~ 1.9))
 pc <- ggplot(cc, aes(model, count, color=cohort, group=cohort)) +
   geom_line(linewidth=0.8) + geom_point(size=3) +
-  geom_text(data=filter(cc, !tie), aes(label=scales::comma(count), hjust=hj, vjust=vj), size=4, show.legend=FALSE) +
-  geom_text(data=filter(cc, tie, cohort=="2020"), aes(label=scales::comma(count)), vjust=-0.9, size=4, color="black") +
+  geom_text(data=filter(cc, !tie), aes(label=scales::comma(count), hjust=hj, vjust=vj), size=5.2, show.legend=FALSE) +
+  geom_text(data=filter(cc, tie, cohort=="2020"), aes(label=scales::comma(count)), vjust=-0.9, size=5.2, color="black") +
   scale_color_manual(values=COHCOL) +
   scale_y_log10(labels=scales::label_comma(), expand=expansion(mult=c(0.08,0.18))) +
   labs(x=NULL, y=expression(SNPs~italic(P)<5%*%10^-5~(log)), tag="c") +
@@ -107,16 +108,14 @@ pd <- ggplot(cl2, aes(-log10(p_base), -log10(p_score))) +
   geom_point(size=0.5, color="grey72", alpha=0.5) +
   geom_point(data=prnp,  color="#b2182b", size=3) +
   geom_point(data=chr21, color="#2166AC", size=3) +
-  geom_text(data=prnp,  aes(label="PRNP\nlost with score"), color="#b2182b", size=3.9, hjust=1.1, vjust=0.3) +
-  geom_text(data=chr21, aes(label="chr21 SNP, promoted by score"), color="#2166AC", size=3.7, hjust=-0.04, vjust=0.5) +
-  annotate("text", x=Inf, y=4.4, hjust=1.05, size=3.7, color="grey35",
-           label=sprintf("λ = %.2f without score\nλ = %.2f with score", lam(cl2$p_base), lam(cl2$p_score))) +
-  labs(x=expression(-log[10](italic(p))*",  binary ~ sex + age + region"),
-       y=expression(-log[10](italic(p))*",  ... + tissue score"), tag="d") + TH
+  geom_text(data=prnp,  aes(label="PRNP"), color="#b2182b", size=5.2, fontface=3, vjust=-1, hjust=0.8) +
+  geom_text(data=chr21, aes(label="chr21 SNP"), color="#2166AC", size=5.2, hjust=-0.15) +
+  labs(x=expression("\u2212"*log[10](italic(p))~without~tissue~score),
+       y=expression("\u2212"*log[10](italic(p))~with~tissue~score), tag="d") + TH
 
 ## assemble and save
-fig <- (qa | qb) / mb20 / mb22 / (pc | pd) + plot_layout(heights=c(1.05, 0.62, 0.62, 1.0))
-ggsave("Figures/figS2_gwas_calibration.png", fig, width=12.5, height=15.5, dpi=170, bg="white", device=ragg::agg_png)
+fig <- (qa | qb) / mb20 / mb22 / (pc | pd) + plot_layout(heights=c(1, 0.6, 0.6, 0.95))
+ggsave("Figures/figS2_gwas_calibration.png", fig, width=13.5, height=17, dpi=170, bg="white", device=ragg::agg_png)
 cat(sprintf("QQ lambda 2020 naive=%.1f pc=%.2f grm=%.2f | 2022 naive=%.1f pc=%.2f grm=%.2f\n",
     lam(g20$p_naive),lam(g20$p_pc),lam(g20$p_grm), lam(g22$p_naive),lam(g22$p_pc),lam(g22$p_grm)))
 cat(sprintf("counts: %s\n", paste(cc$cohort, cc$model, cc$count, collapse=" | ")))

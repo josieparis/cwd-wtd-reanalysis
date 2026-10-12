@@ -51,11 +51,12 @@ GCTA and LDAK (used by GxEMM) were run on a Linux cluster. GxEMM is from https:/
 | Supplementary Tables 1-4 | `build_supp_tables.R` |
 | Supplementary Fig 1 | `figS1_concordance_compute.py`, `fig_s1_concordance.R` |
 | Supplementary Fig 2, Supplementary Table 3 | `fig2_calibration.R`, `make_fig2_data.py`, `reanalysis/scripts/04_gwas_lambda.py` |
-| Supplementary Fig 3 | `arsb_perfarm.R`, `fig_s3_arsb.R` |
 | Table S1 recount, threshold counts | `reanalysis/scripts/13_threshold_counts.py` |
 | Tissue score as a covariate | `tissue_score_covariate.R` |
 | Within-farm attenuation | `within_farm_attenuation.R` |
 | Winner's curse, PRNP effect size | `reanalysis/scripts/06_winners_curse.py` |
+| PRNP in the 2022 deer carried over from 2020 vs new deer | `prnp_carried_vs_new.R` |
+| ARSB heterogeneity in the authors' meta-analyses | `arsb_heterogeneity.R` |
 | 2020 prediction (Supplementary Table 4) | `reanalysis/scripts/12_table1_reproduce.R` |
 
 ### Software
