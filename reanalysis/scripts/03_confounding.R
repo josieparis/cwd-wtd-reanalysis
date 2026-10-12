@@ -3,14 +3,14 @@
 # i.e. how much of the phenotype structure alone explains
 
 library(MASS)
+library(dplyr)
 
 ## working dir
 ROOT <- "<dir>/Seabury_data/reanalysis"
 
 ## read in PCs and phenotypes
-d <- read.delim(file.path(ROOT,"01_structure","pca_merged.tsv"))
-d$region <- relevel(factor(d$region), ref="South")
-d$sex <- factor(d$sex_raw)
+d <- read.delim(file.path(ROOT,"01_structure","pca_merged.tsv")) %>%
+  mutate(region = relevel(factor(region), ref="South"), sex = factor(sex_raw))
 pcs <- paste0("PC",1:10)
 
 ## McFadden and Nagelkerke pseudo R2
@@ -44,7 +44,7 @@ cat(sprintf("  LRT PCs add over region: p=%.3e  (structure beyond region)\n",
 cat("\n=====================================================================\n")
 cat("ORDINAL  CMS_CWDScore 0/1/2  (proportional-odds logistic, polr)\n")
 cat("=====================================================================\n")
-d$score <- factor(d$score, ordered=TRUE)
+d <- d %>% mutate(score = factor(score, ordered=TRUE))
 o0 <- polr(score~1, data=d, Hess=TRUE)
 oR <- polr(score~region, data=d, Hess=TRUE)
 oP <- polr(reformulate(pcs,"score"), data=d, Hess=TRUE)

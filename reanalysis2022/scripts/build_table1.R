@@ -1,6 +1,8 @@
 # Table 1: lambda, number of SNPs at P < 5e-8 and P < 5e-5 and the PRNP P value
 # for GEMMA, GCTA --mlma and GCTA --mlma-loco (2020 binary and score, 2022 binary)
 
+library(purrr)
+
 ## working dir
 setwd("<dir>/Seabury_data")
 
@@ -32,22 +34,20 @@ sets <- list(
     "GCTA --mlma-loco" = rd("reanalysis2022/mlma_results/loco_bin_chr29.loco.mlma", "SNP", "p"))))
 
 ## counts over the markers tested by all three models
-rows <- list()
-for (s in sets) {
+t1 <- map_dfr(sets, function(s) {
   ok <- lapply(s$models, function(p) names(p)[is.finite(p) & p > 0])
   common <- Reduce(intersect, ok)
   cat(sprintf("%s %s: markers per model %s -> common %s\n", s$ds, s$trait,
               paste(sapply(ok, length), collapse = "/"), format(length(common), big.mark = ",")))
-  for (m in names(s$models)) {
+  map_dfr(names(s$models), function(m) {
     p <- s$models[[m]][common]
-    rows[[length(rows) + 1]] <- data.frame(
+    data.frame(
       Dataset = sprintf("%s (n = %s)", s$ds, format(s$n, big.mark = ",")), Phenotype = s$trait, Model = m,
       lambda = sprintf("%.2f", lam(p)), SNPs_P_5e8 = sum(p < 5e-8), SNPs_P_5e5 = sum(p < 5e-5),
       PRNP_P = fmtP(p[[PRNP]]), PRNP_P_raw = signif(p[[PRNP]], 4), markers = length(common),
       check.names = FALSE)
-  }
-}
-t1 <- do.call(rbind, rows)
+  })
+})
 print(t1, row.names = FALSE)
 
 ## write table

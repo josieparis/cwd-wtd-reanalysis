@@ -4,6 +4,7 @@
 
 library(rrBLUP)
 library(pROC)
+library(dplyr)
 
 ## working dir
 ROOT <- "<dir>/Seabury_data/reanalysis"
@@ -14,11 +15,11 @@ auc<-function(y,p) as.numeric(pROC::auc(response=y,predictor=p,quiet=TRUE,levels
 ids<-read.table(file.path(S,"grm.rel.id"))[,1]; n<-length(ids)
 K<-as.matrix(read.table(gzfile(file.path(S,"grm.rel.gz")))); dimnames(K)<-list(ids,ids)
 Kd<-K+diag(1e-4,n); Koff<-K; diag(Koff)<- -Inf
-meta<-read.delim(file.path(ROOT,"00_data/samples.tsv"),colClasses=c(clean_id="character")); rownames(meta)<-meta$clean_id; meta<-meta[ids,]
+meta<-read.delim(file.path(ROOT,"00_data/samples.tsv"),colClasses=c(clean_id="character")) %>% slice(match(ids,clean_id))
 y<-meta$binary
 
 ## GBLUP prediction of the test animals
-gblup_pred<-function(tr,te){ df<-data.frame(gid=ids,yv=y); df$yv[te]<-NA
+gblup_pred<-function(tr,te){ df<-data.frame(gid=ids,yv=y) %>% mutate(yv=replace(yv,te,NA))
   kin.blup(data=df,geno="gid",pheno="yv",K=Kd)$g[te] }
 
 ## clusters = connected components of GRM >= thr

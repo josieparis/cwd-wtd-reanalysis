@@ -3,6 +3,7 @@
 # retained = |r within farm| / |r marginal|, attenuation = 1 - retained
 
 library(readxl)
+library(tidyverse)
 
 ## working dir
 setwd("<dir>/Seabury_data")
@@ -22,8 +23,8 @@ miss <- setdiff(cand, names(gt)); cand <- intersect(cand, names(gt))
 att <- function(m) { g <- suppressWarnings(as.numeric(gt[[m]])); k <- ok & !is.na(g); f <- factor(cv$farm[k])
   rm <- cor(g[k], y[k]); rw <- cor(resid(lm(g[k] ~ f)), resid(lm(y[k] ~ f)))
   data.frame(marker = m, r_marginal = rm, r_within_farm = rw, retained = abs(rw) / abs(rm)) }
-res <- do.call(rbind, lapply(cand, att))
-pr <- res[res$marker == "G96S_G_to_A_at286", ]; np <- res[res$marker != "G96S_G_to_A_at286", ]
+res <- map_dfr(cand, att)
+pr <- res %>% filter(marker == "G96S_G_to_A_at286"); np <- res %>% filter(marker != "G96S_G_to_A_at286")
 
 ## summary
 cat(sprintf("Table S2 candidates: %d unique markers (%d not among the deposited genotypes: %s)\n",

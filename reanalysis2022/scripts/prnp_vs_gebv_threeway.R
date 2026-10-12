@@ -3,6 +3,7 @@
 # writes reanalysis2022/data/prnp_threeway_summary.csv and prnp_threeway_perfarm.csv
 
 library(rrBLUP)
+library(dplyr)
 
 ## working dir
 setwd("<dir>/Seabury_data")
@@ -10,10 +11,10 @@ setwd("<dir>/Seabury_data")
 source("reanalysis2022/scripts/load_grm.R")
 
 ## read in covariates and candidate genotypes
-cov <- read.csv("reanalysis2022/data/cov_1170.csv", stringsAsFactors=FALSE)
+cov <- read.csv("reanalysis2022/data/cov_1170.csv", stringsAsFactors=FALSE) %>% mutate(y=suppressWarnings(as.numeric(binary)))
 gt  <- read.delim("reanalysis2022/data/candidate_genos_1170.tsv", check.names=FALSE, stringsAsFactors=FALSE)
 n <- nrow(cov); stopifnot(all(gt$CMSID==cov$CMSID))
-y<-suppressWarnings(as.numeric(cov$binary)); farm<-cov$farm; ids<-cov$CMSID
+y<-cov$y; farm<-cov$farm; ids<-cov$CMSID
 prnp<-suppressWarnings(as.numeric(gt[["G96S_G_to_A_at286"]]))            # 0/1/2 protective allele dosage
 
 ## PLINK GRMs: all autosomes, and without chr13 (PRNP at 47,056,387)
@@ -30,13 +31,14 @@ metvec <- function(pred,truth,thr=0.5){ ok<-!is.na(pred)&!is.na(truth); p<-pred[
   c(auc=auc,acc=acc,sens=sens,spec=spec,mcc=if(den>0)(TP*TN-FP*FN)/den else 0,rmse=rmse,r=r) }
 MET<-c("auc","acc","sens","spec","mcc","rmse","r")
 
-## leave one farm out (farms with >= 10 deer and >= 3 cases and controls)
-valid<-which(!is.na(y)&!is.na(farm)&farm!=""); tab<-table(farm[valid],y[valid])
-qfarms<-rownames(tab)[rowSums(tab)>=10 & apply(tab,1,min)>=3]; cat("[chk] qualifying farms:",length(qfarms),"\n\n")
+## leave one farm out (farms with >= 10 deer and >= 3 cases and controls), with deer and prevalence per farm
+info<-cov %>% filter(!is.na(y), !is.na(farm), farm!="") %>% group_by(farm) %>%
+  summarise(n=n(), cases=sum(y==1), controls=sum(y==0), prev=mean(y==1), .groups="drop") %>%
+  filter(n>=10, cases>=3, controls>=3) %>% select(farm, n, prev) %>% as.data.frame()
+qfarms<-info$farm; cat("[chk] qualifying farms:",length(qfarms),"\n\n")
 mods<-c("PRNP_only","GEBV_full","GEBV_minusPRNPchr")
 pf<-lapply(mods,function(m) matrix(NA,length(qfarms),7,dimnames=list(qfarms,MET))); names(pf)<-mods
-info<-data.frame(farm=qfarms,n=NA,prev=NA)
-for(fi in seq_along(qfarms)){ F<-qfarms[fi]; fidx<-which(farm==F&!is.na(y)); info$n[fi]<-length(fidx); info$prev[fi]<-mean(y[fidx]==1)
+for(fi in seq_along(qfarms)){ F<-qfarms[fi]; fidx<-which(farm==F&!is.na(y))
   ym<-y; ym[farm==F]<-NA
   pf$GEBV_full[fi,]         <- metvec(gblup(ym,Kfull)[fidx], y[fidx])
   pf$GEBV_minusPRNPchr[fi,] <- metvec(gblup(ym,Kno13)[fidx], y[fidx])
@@ -50,8 +52,8 @@ for(fi in seq_along(qfarms)){ F<-qfarms[fi]; fidx<-which(farm==F&!is.na(y)); inf
 fmt<-function(m) sprintf("%.3f (%.3f)",colMeans(m,na.rm=T),apply(m,2,sd,na.rm=T))
 summ<-data.frame(metric=MET, PRNP_only=fmt(pf$PRNP_only), GEBV_full=fmt(pf$GEBV_full), GEBV_minusPRNPchr=fmt(pf$GEBV_minusPRNPchr))
 cat("\n=========== THREE-WAY out-of-farm (mean over 13 farms (SD)) ===========\n"); print(summ,row.names=FALSE)
-out<-data.frame(info, auc_PRNP=round(pf$PRNP_only[,"auc"],3), auc_GEBVfull=round(pf$GEBV_full[,"auc"],3),
-                auc_GEBVminus13=round(pf$GEBV_minusPRNPchr[,"auc"],3))
+out<-info %>% mutate(auc_PRNP=round(pf$PRNP_only[,"auc"],3), auc_GEBVfull=round(pf$GEBV_full[,"auc"],3),
+                     auc_GEBVminus13=round(pf$GEBV_minusPRNPchr[,"auc"],3))
 cat("\n---- per farm (out-of-farm AUC) ----\n"); print(out,row.names=FALSE)
 
 ## write tables

@@ -3,6 +3,7 @@
 # Rscript prediction_lofo.R [plink|custom] (default plink GRM), writes reanalysis2022/data/prediction_lofo_<grm>.rds
 
 library(rrBLUP)
+library(dplyr)
 
 ## working dir
 setwd("<dir>/Seabury_data")
@@ -23,12 +24,14 @@ if (GRM == "plink") {
 ei <- eigen(K, symmetric = TRUE); K <- ei$vectors %*% (pmax(ei$values, 1e-6) * t(ei$vectors))
 dimnames(K) <- list(ids, ids)
 
-## phenotype and covariates (none, or sex + age + region)
-y    <- suppressWarnings(as.numeric(cov$binary)); farm <- cov$farm
-sexn <- suppressWarnings(as.numeric(cov$sex)); cov$sexn <- sexn
+## phenotype and covariates (none, or sex + age + region); row = row of the deer in K
+cov  <- cov %>% mutate(row = row_number(), y = suppressWarnings(as.numeric(binary)),
+                       sexn = suppressWarnings(as.numeric(sex)))
+y    <- cov$y; farm <- cov$farm
+cc   <- cov %>% filter(!is.na(sexn), !is.na(age))                   # deer with known sex and age
 Xall <- list(none = matrix(1, n, 1),
-             cov  = { X <- matrix(NA_real_, n, 5); ok <- !is.na(sexn) & !is.na(cov$age)
-                      X[ok, ] <- model.matrix(~ factor(sexn) + age + region, cov[ok, ]); X })
+             cov  = { X <- matrix(NA_real_, n, 5)
+                      X[cc$row, ] <- model.matrix(~ factor(sexn) + age + region, cc); X })
 
 ## GBLUP on the training animals, prediction = fixed effects + genomic value
 gblup <- function(train, X) {                       # predicted phenotype for every animal
@@ -52,10 +55,11 @@ metvec <- function(p, t, thr = 0.5) {
 }
 MET <- c("auc", "acc", "sens", "spec", "mcc", "rmse", "r")
 
-## farms with >= 10 deer and >= 3 cases and controls
-valid  <- which(!is.na(y) & !is.na(farm) & farm != "")
-tab    <- table(farm[valid], y[valid])
-qfarms <- rownames(tab)[rowSums(tab) >= 10 & apply(tab, 1, min) >= 3]
+## deer with known CWD status on a named farm, and farms with >= 10 deer and >= 3 cases and controls
+vd     <- cov %>% filter(!is.na(y), !is.na(farm), farm != "")
+valid  <- vd$row
+qfarms <- vd %>% group_by(farm) %>% summarise(n = n(), cases = sum(y == 1), controls = sum(y == 0), .groups = "drop") %>%
+  filter(n >= 10, cases >= 3, controls >= 3) %>% pull(farm)
 REPS   <- 20
 
 ## run LOFO, size-matched and random 5-fold (seeds as in the original leave_one_farm_out.R)

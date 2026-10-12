@@ -2,6 +2,8 @@
 # each model uses the original paper's complete-case sample: 1,170 (no covariates), 1,166 (+ sex/age/region)
 # and 1,151 (+ sex/age/farm, farms with >= 10 deer, same deer as GEMMA pheno_farm); writes into cluster_h2/gcta_plink
 
+library(dplyr)
+
 ## working dir
 setwd("<dir>/Seabury_data")
 
@@ -23,15 +25,15 @@ for (f in c("pheno.txt", "covar_region.txt", "qcovar_age.txt"))
   file.copy(file.path(OLD, f), file.path(OUT, f), overwrite = TRUE)
 
 ## farm model: complete sex and age, farms with >= 10 deer of known CWD status
-cov <- read.csv("reanalysis2022/data/cov_1170.csv", stringsAsFactors = FALSE)
-cov$cwd <- suppressWarnings(as.numeric(cov$binary)); cov$sexn <- suppressWarnings(as.numeric(cov$sex))
-tb  <- table(cov$farm[!is.na(cov$cwd)]); big <- names(tb)[tb >= 10]
-f10 <- cov[!is.na(cov$cwd) & !is.na(cov$sexn) & !is.na(cov$age) & cov$farm %in% big, ]
+cov <- read.csv("reanalysis2022/data/cov_1170.csv", stringsAsFactors = FALSE) %>%
+  mutate(cwd = suppressWarnings(as.numeric(binary)), sexn = suppressWarnings(as.numeric(sex)))
+big <- cov %>% filter(!is.na(cwd)) %>% count(farm) %>% filter(n >= 10) %>% pull(farm)
+f10 <- cov %>% filter(!is.na(cwd), !is.na(sexn), !is.na(age), farm %in% big)
 g   <- scan("reanalysis2022/cluster_h2/gemma/pheno_farm.txt", what = "", quiet = TRUE)
 stopifnot(nrow(f10) == 1151, identical(cov$CMSID[!is.na(g)], f10$CMSID))   # same deer as GEMMA
-write.table(data.frame(f10$CMSID, f10$CMSID), file.path(OUT, "keep_farm10.txt"),
+write.table(f10 %>% select(FID = CMSID, IID = CMSID), file.path(OUT, "keep_farm10.txt"),
             quote = FALSE, row.names = FALSE, col.names = FALSE, sep = "\t")
-write.table(data.frame(f10$CMSID, f10$CMSID, f10$sexn, f10$farm), file.path(OUT, "covar_farm10.txt"),
+write.table(f10 %>% select(FID = CMSID, IID = CMSID, sexn, farm), file.path(OUT, "covar_farm10.txt"),
             quote = FALSE, row.names = FALSE, col.names = FALSE, sep = "\t")
 
 ## check the binary GRM reads back to the PLINK matrix

@@ -3,6 +3,7 @@
 # of the farm models (Model A) and with farm as a fixed effect (Model B)
 
 library(GxEMM)
+library(dplyr)
 
 ## working dir
 setwd("<dir>/Seabury_data")
@@ -74,20 +75,19 @@ cat("wrote", file.path(OUT,"table5_gxemm.csv"), "\n")
 
 ## Supplementary Table 5: per-farm heritability
 cov <- read.csv("reanalysis2022/data/cov_1170.csv", stringsAsFactors=FALSE)
-cov$cwd <- suppressWarnings(as.numeric(cov$binary)); cov$sexn <- suppressWarnings(as.numeric(cov$sex))
-covf<- cov[!is.na(cov$cwd) & !is.na(cov$sexn) & !is.na(cov$age),]
+covf <- cov %>%
+  mutate(cwd = suppressWarnings(as.numeric(binary)), sexn = suppressWarnings(as.numeric(sex))) %>%
+  filter(!is.na(cwd), !is.na(sexn), !is.na(age))
 farms <- fm$farms
-sdf <- data.frame(
-  Farm   = gsub("East","Northeast", farms),
-  Region = gsub("[0-9]+","", gsub("East","Northeast", farms)),
-  n      = sapply(farms, function(f) sum(covf$farm==f)),
-  Prevalence = sapply(farms, function(f) sprintf("%.0f%%", 100*mean(covf$cwd[covf$farm==f]))),
-  check.names=FALSE, stringsAsFactors=FALSE)
+sdf <- tibble(farm = farms) %>%                                   # one row per farm, in GxEMM order
+  left_join(covf %>% group_by(farm) %>%
+              summarise(n = n(), Prevalence = sprintf("%.0f%%", 100*mean(cwd))), by = "farm") %>%
+  transmute(Farm = gsub("East","Northeast", farm), Region = gsub("[0-9]+","", Farm), n, Prevalence)
 for(k in names(KCOLS)) if(is.list(fm[[k]]) && is.list(fm[[k]]$free)){
   s <- fm[[k]]$free
   sdf[[sprintf("Liability h² ± SE (K = %s)", sub("liab_","",k))]] <- mapply(pm, s$h2, se(s$h2Covmat))
 }
-sdf <- sdf[order(sdf$Region, as.integer(gsub("[^0-9]", "", sdf$Farm))),]   # numeric farm order
+sdf <- sdf %>% arrange(Region, as.integer(gsub("[^0-9]", "", Farm)))   # numeric farm order
 write.csv(sdf, file.path(OUT,"tableS5_gxemm_perfarm.csv"), row.names=FALSE, quote=FALSE)
 cat("wrote", file.path(OUT,"tableS5_gxemm_perfarm.csv"), " (", nrow(sdf), "farms, K:",
     paste(sub("liab_","", names(KCOLS)[sapply(names(KCOLS), function(k) is.list(fm[[k]]))]), collapse=","), ")\n")

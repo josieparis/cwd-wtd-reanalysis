@@ -17,17 +17,18 @@ TOOLCOL <- c(`original value (Seabury et al. 2022)`="#111111", GCTA="#1F6F3F", G
 cs <- c("no covariates","+ sex/age/region","+ sex/age/farm")
 tl <- names(TOOLCOL)
 t3 <- read.csv("MANUSCRIPT_tables/table3_heritability_observed_long.csv", stringsAsFactors=FALSE)  # from build_table3.R
-t3 <- t3[t3$cohort == 2022, ]
-dA <- data.frame(covset = sub("^none$", "no covariates", t3$covset),
-                 tool   = sub("Original (EMMAX)", "original value (Seabury et al. 2022)", t3$tool, fixed=TRUE),
-                 h2 = t3$h2, se = t3$se)
+dA <- t3 %>%
+  filter(cohort == 2022) %>%
+  transmute(covset = sub("^none$", "no covariates", covset),
+            tool   = sub("Original (EMMAX)", "original value (Seabury et al. 2022)", tool, fixed=TRUE),
+            h2, se)
 ## GxEMM/LDAK: HOM model, observed scale, 1,120 deer on farms with >= 10 deer and both cases and controls
 fa <- readRDS("reanalysis2022/cluster_gxemm/gxemm_farmadj_results.rds")
 gx <- function(m) { o <- fa[[m]]$obs$hom; c(unname(o$h2[1]), sqrt(o$h2Covmat[1, 1])) }
 gR <- gx("A_region_adj"); gF <- gx("B_farm_adj")                # GxEMM/LDAK, region- and farm-adjusted
-dA <- rbind(dA, data.frame(covset=cs[2:3], tool="GxEMM/LDAK", h2=c(gR[1], gF[1]), se=c(gR[2], gF[2])))
+dA <- dA %>% bind_rows(data.frame(covset=cs[2:3], tool="GxEMM/LDAK", h2=c(gR[1], gF[1]), se=c(gR[2], gF[2])))
 stopifnot(all(dA$covset %in% cs), all(dA$tool %in% tl))
-dA$covset <- factor(dA$covset, levels=cs); dA$tool <- factor(dA$tool, levels=tl)
+dA <- dA %>% mutate(covset=factor(covset, levels=cs), tool=factor(tool, levels=tl))
 pa <- ggplot(dA, aes(covset, h2, color=tool)) +
   geom_errorbar(aes(ymin=h2-se, ymax=h2+se), position=position_dodge(0.6), width=0.25, linewidth=0.5, na.rm=TRUE) +
   geom_point(position=position_dodge(0.6), size=2.6) +
@@ -50,23 +51,24 @@ cov <- read.csv("reanalysis2022/data/cov_1170.csv", stringsAsFactors=FALSE)
 P   <- mean(suppressWarnings(as.numeric(cov$binary))==1, na.rm=TRUE)   # sample case fraction 0.352
 h2o <- hs[[1]]$obs                                                    # GCTA observed h2, no covariates (0.593)
 liabf <- function(K){ Th<-qnorm(1-K); z<-dnorm(Th); h2o*(K*(1-K))^2/(P*(1-P)*z^2) }
-dB <- data.frame(K=seq(0.01,0.50,0.002)); dB$h2L <- liabf(dB$K)
-anchor <- data.frame(K=KS, h2L=sapply(hs, `[[`, "liab")); anchor$lab <- sprintf("%.2f", anchor$h2L)
-lit    <- data.frame(K=c(0.34,0.42,0.49)); lit$h2L <- liabf(lit$K); lit$lab <- sprintf("%.2f",lit$h2L)
-lit$vj <- ifelse(lit$h2L < 1, 2.2, -1.2)                                  # label below points under the h2 = 1 line
+dB <- data.frame(K=seq(0.01,0.50,0.002)) %>% mutate(h2L=liabf(K))
+anchor <- data.frame(K=KS, h2L=sapply(hs, `[[`, "liab")) %>% mutate(lab=sprintf("%.2f", h2L))
+lit    <- data.frame(K=c(0.34,0.42,0.49)) %>%
+  mutate(h2L=liabf(K), lab=sprintf("%.2f", h2L),
+         vj=if_else(h2L < 1, 2.2, -1.2))                                  # label below points under the h2 = 1 line
 Kx <- uniroot(function(k) liabf(k) - 1, c(0.2, 0.5))$root                # where the curve crosses 1
 ## same transform for the covariate models (each with its own observed h2 and sample case fraction)
 hs2 <- function(f){ L <- strsplit(readLines(f), "\t"); as.numeric(Filter(function(z) z[1]=="V(G)/Vp", L)[[1]][2]) }
-c2  <- cov; c2$cwd <- suppressWarnings(as.numeric(c2$binary)); c2$sexn <- suppressWarnings(as.numeric(c2$sex))
-tb2 <- table(c2$farm[!is.na(c2$cwd)]); big2 <- names(tb2)[tb2 >= 10]
-s1  <- !is.na(c2$cwd) & !is.na(c2$sexn) & !is.na(c2$age); s2 <- s1 & c2$farm %in% big2   # 1,166 / 1,151 deer
+c2  <- cov %>% mutate(cwd=suppressWarnings(as.numeric(binary)), sexn=suppressWarnings(as.numeric(sex)))
+big2 <- c2 %>% filter(!is.na(cwd)) %>% count(farm) %>% filter(n >= 10) %>% pull(farm)
+s1  <- c2 %>% filter(!is.na(cwd), !is.na(sexn), !is.na(age)); s2 <- s1 %>% filter(farm %in% big2)   # 1,166 / 1,151 deer
 lee <- function(h, Pp, K){ z <- dnorm(qnorm(1-K)); h*(K*(1-K))^2/(Pp*(1-Pp)*z^2) }
 GP  <- "reanalysis2022/cluster_h2/gcta_plink/results"
 CS  <- c("no covariates", "+ sex/age/region", "+ sex/age/farm")
-dC  <- rbind(data.frame(K=dB$K, h2L=dB$h2L, model=CS[1]),
-             data.frame(K=dB$K, h2L=lee(hs2(file.path(GP,"h2_region.hsq")), mean(c2$cwd[s1]), dB$K), model=CS[2]),
-             data.frame(K=dB$K, h2L=lee(hs2(file.path(GP,"h2_farm.hsq")),   mean(c2$cwd[s2]), dB$K), model=CS[3]))
-dC$model <- factor(dC$model, levels=CS)
+dC  <- bind_rows(data.frame(K=dB$K, h2L=dB$h2L, model=CS[1]),
+                 data.frame(K=dB$K, h2L=lee(hs2(file.path(GP,"h2_region.hsq")), mean(s1$cwd), dB$K), model=CS[2]),
+                 data.frame(K=dB$K, h2L=lee(hs2(file.path(GP,"h2_farm.hsq")),   mean(s2$cwd), dB$K), model=CS[3])) %>%
+  mutate(model=factor(model, levels=CS))
 pb <- ggplot(dB, aes(K, h2L)) +
   annotate("rect", xmin=0, xmax=0.5, ymin=1, ymax=Inf, fill="#F6D5D5") +       # Inf = panel edge
   geom_hline(yintercept=1, linetype=2, color="grey40") +

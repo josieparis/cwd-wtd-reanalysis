@@ -2,6 +2,8 @@
 # AUC, at prevalence K = 0.01 to 0.35 using the liability h2 at each K (Lee et al. 2011 transform)
 # run after prediction_lofo.R, writes MANUSCRIPT_tables/auc_ceiling_wray.csv
 
+library(tidyverse)
+
 ## working dir
 setwd("<dir>/Seabury_data")
 
@@ -27,12 +29,13 @@ stopifnot(abs(auc_liab(0.5, 0.34) - 0.77) < 0.005, abs(auc_liab(0.5, 0.34, 0.5) 
 
 ## observed scale h2 (GCTA, PLINK GRM) and case fraction of each sample
 G22 <- "reanalysis2022/cluster_h2/gcta_plink/results"; G20 <- "reanalysis2022/cluster_h2/gcta_2020/results"
-cv  <- read.csv("reanalysis2022/data/cov_1170.csv", stringsAsFactors = FALSE)
-y   <- suppressWarnings(as.numeric(cv$binary)); sx <- suppressWarnings(as.numeric(cv$sex))
-tb  <- table(cv$farm[!is.na(y)]); sF <- !is.na(y) & !is.na(sx) & !is.na(cv$age) & cv$farm %in% names(tb)[tb >= 10]
+cv  <- read.csv("reanalysis2022/data/cov_1170.csv", stringsAsFactors = FALSE) %>%
+  mutate(y = suppressWarnings(as.numeric(binary)), sx = suppressWarnings(as.numeric(sex)))
+big <- cv %>% filter(!is.na(y)) %>% count(farm) %>% filter(n >= 10) %>% pull(farm)   # farms with >= 10 deer of known status
+sF  <- cv %>% filter(!is.na(y), !is.na(sx), !is.na(age), farm %in% big)              # farm-adjusted sample
 mods <- list(
-  `2022, unadjusted`    = list(h2o = hsq(file.path(G22, "h2_nocov.hsq")), P = mean(y, na.rm = TRUE)),
-  `2022, farm-adjusted` = list(h2o = hsq(file.path(G22, "h2_farm.hsq")),  P = mean(y[sF])),
+  `2022, unadjusted`    = list(h2o = hsq(file.path(G22, "h2_nocov.hsq")), P = mean(cv$y, na.rm = TRUE)),
+  `2022, farm-adjusted` = list(h2o = hsq(file.path(G22, "h2_farm.hsq")),  P = mean(sF$y)),
   `2020, unadjusted`    = list(h2o = hsq(file.path(G20, "b_none.hsq")),   P = 284 / 807))
 # check the transform against GCTA --prevalence 0.05
 stopifnot(abs(lee(mods[[1]]$h2o, mods[[1]]$P, 0.05) - hsq(file.path(G22, "h2_nocov_liab_0.05.hsq"), "V(G)/Vp_L")) < 0.002,
@@ -42,16 +45,16 @@ stopifnot(abs(lee(mods[[1]]$h2o, mods[[1]]$P, 0.05) - hsq(file.path(G22, "h2_noc
 pr  <- readRDS("reanalysis2022/data/prediction_lofo_plink.rds")$none
 t20 <- read.csv("reanalysis/01_structure/table1_reproduction.csv", stringsAsFactors = FALSE)
 AUC <- c(in22 = mean(pr$random_5fold[, "auc"]), lofo22 = mean(pr$lofo[, "auc"]),
-         in20 = t20$mean[t20$config == "k=5  None" & t20$metric == "AUC"])
+         in20 = t20 %>% filter(config == "k=5  None", metric == "AUC") %>% pull(mean))
 
 ## liability h2, AUC ceiling and implied R at each K
 KS  <- c(0.01, 0.05, 0.10, 0.15, 0.20, 0.25, 0.26, 0.30, 0.35)
-out <- do.call(rbind, lapply(names(mods), function(m) do.call(rbind, lapply(KS, function(K) {
+out <- map_dfr(names(mods), function(m) map_dfr(KS, function(K) {
   h <- lee(mods[[m]]$h2o, mods[[m]]$P, K); a <- if (grepl("^2020", m)) AUC["in20"] else AUC[c("in22", "lofo22")]
   data.frame(model = m, K = K, h2L = round(h, 3), AUC_max = round(if (h < 1) auc_liab(K, h) else NA, 3),
              R_insample = round(implied_R(K, h, a[1]), 3),
              R_out_of_farm = if (length(a) > 1) round(implied_R(K, h, a[2]), 4) else NA)
-}))))
+}))
 
 ## write table
 dir.create("MANUSCRIPT_tables", showWarnings = FALSE)
@@ -63,9 +66,9 @@ for (m in names(mods)) cat(sprintf("%-20s h2_obs = %.3f, case fraction = %.3f\n"
 print(out, row.names = FALSE)
 rng <- function(x) sprintf("%.2f to %.2f", min(x, na.rm = TRUE), max(x, na.rm = TRUE))
 for (lo in c(0.01, 0.05)) {
-  s <- out[out$K >= lo, ]
+  s <- out %>% filter(K >= lo)
   cat(sprintf("\nK = %.2f to 0.35:\n", lo))
-  for (m in names(mods)) { d <- s[s$model == m, ]
+  for (m in names(mods)) { d <- s %>% filter(model == m)
     cat(sprintf("  %-20s AUC_max %s | in-sample needs R %s (%d K above the ceiling)%s\n", m, rng(d$AUC_max), rng(d$R_insample),
                 sum(is.na(d$R_insample)), if (!grepl("^2020", m)) sprintf(" | out-of-farm needs R %s", rng(d$R_out_of_farm)) else "")) }
 }

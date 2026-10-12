@@ -3,6 +3,7 @@
 # writes reanalysis2022/cluster_h2/rrblup/h2_rrblup_se.csv
 
 library(rrBLUP)
+library(dplyr)
 
 ## working dir
 setwd("<dir>/Seabury_data")
@@ -48,8 +49,9 @@ add <- function(cohort, trait, covset, r){
 ## 2020 cohort (n = 807)
 cat("=========== 2020 cohort ===========\n")
 K <- read_rel("reanalysis/01_structure/grm")
-s <- read.delim("reanalysis/00_data/samples.tsv", stringsAsFactors=FALSE)
-s <- s[match(rownames(K), s$clean_id), ]; stopifnot(!anyNA(s$clean_id))
+s <- read.delim("reanalysis/00_data/samples.tsv", stringsAsFactors=FALSE) %>%
+  slice(match(rownames(K), clean_id))
+stopifnot(identical(s$clean_id, rownames(K)))
 K20 <- pd(K)
 X0  <- model.matrix(~ 1, s)
 XR  <- model.matrix(~ region + sex_raw + age, s)
@@ -64,21 +66,20 @@ add("2020", "score",  "+ sex/age/region",                  h2_se(s$score,  K20, 
 ## farm models use farms with >= 10 deer
 cat("\n=========== 2022 cohort ===========\n")
 K   <- read_rel("reanalysis2022/01_structure/grm2022")
-cov <- read.csv("reanalysis2022/data/cov_1170.csv", stringsAsFactors=FALSE)
-cov$cwd  <- suppressWarnings(as.numeric(cov$binary))
-cov$sexn <- suppressWarnings(as.numeric(cov$sex))
-tb  <- table(cov$farm[!is.na(cov$cwd)]); big <- names(tb)[tb >= 10]
-fit22 <- function(keep, form){
-  d <- cov[keep, ]; Ks <- pd(K[d$CMSID, d$CMSID])
+cov <- read.csv("reanalysis2022/data/cov_1170.csv", stringsAsFactors=FALSE) %>%
+  mutate(cwd = suppressWarnings(as.numeric(binary)), sexn = suppressWarnings(as.numeric(sex)))
+big <- cov %>% filter(!is.na(cwd)) %>% count(farm) %>% filter(n >= 10) %>% pull(farm)
+fit22 <- function(d, form){
+  Ks <- pd(K[d$CMSID, d$CMSID])
   h2_se(d$cwd, Ks, model.matrix(form, d))
 }
-add("2022", "binary", "none",             fit22(which(!is.na(cov$cwd)), ~ 1))
-add("2022", "binary", "+ sex/age/region", fit22(which(!is.na(cov$cwd) & !is.na(cov$sexn) & !is.na(cov$age)),
+add("2022", "binary", "none",             fit22(cov %>% filter(!is.na(cwd)), ~ 1))
+add("2022", "binary", "+ sex/age/region", fit22(cov %>% filter(!is.na(cwd), !is.na(sexn), !is.na(age)),
                                                 ~ factor(sexn) + age + region))
-add("2022", "binary", "+ sex/age/farm",   fit22(which(!is.na(cov$cwd) & !is.na(cov$sexn) & !is.na(cov$age) &
-                                                      cov$farm %in% big), ~ factor(sexn) + age + factor(farm)))
+add("2022", "binary", "+ sex/age/farm",   fit22(cov %>% filter(!is.na(cwd), !is.na(sexn), !is.na(age), farm %in% big),
+                                                ~ factor(sexn) + age + factor(farm)))
 
 ## write table
-out <- do.call(rbind, res)
+out <- bind_rows(res)
 write.csv(out, file.path(OUT, "h2_rrblup_se.csv"), row.names = FALSE)
 cat("\nwrote", file.path(OUT, "h2_rrblup_se.csv"), "\n")

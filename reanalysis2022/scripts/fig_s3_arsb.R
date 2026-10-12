@@ -6,6 +6,7 @@ library(ggplot2)
 library(patchwork)
 library(ggrepel)
 library(ggtext)
+library(dplyr)
 
 ## working dir
 setwd("<dir>/Seabury_data")
@@ -13,21 +14,20 @@ setwd("<dir>/Seabury_data")
 source("reanalysis2022/scripts/fig_theme.R"); TH <- theme_seabury()
 
 ## read in per-farm data (region "East" shown as Northeast)
-ag <- read.csv("reanalysis2022/data/arsb_perfarm.csv", stringsAsFactors=FALSE)
-ag$region <- gsub("East","Northeast", ag$region); ag$farm <- gsub("East","Northeast", ag$farm)
-ag$prevpct <- ag$prev*100
+ag <- read.csv("reanalysis2022/data/arsb_perfarm.csv", stringsAsFactors=FALSE) %>%
+  mutate(region=gsub("East","Northeast", region), farm=gsub("East","Northeast", farm), prevpct=prev*100)
 ## dominant herd in each region, dropped for the second correlation
 dropfarm <- c(Northeast="Northeast2", Midwest="Midwest6", South="South5")
 
 ## one panel per region
 panel <- function(R, tag){
-  s <- ag[ag$region==R,]; col <- REGCOL[[R]]
+  s <- ag %>% filter(region==R); col <- REGCOL[[R]]
   ct <- cor.test(s$prev, s$maf); r <- unname(ct$estimate); p <- ct$p.value
-  df <- dropfarm[[R]]; keep <- s[s$farm!=df,]; rdrop <- cor(keep$prev, keep$maf)
+  df <- dropfarm[[R]]; keep <- s %>% filter(farm!=df); rdrop <- cor(keep$prev, keep$maf)
   ggplot(s, aes(prevpct, maf)) +
     geom_smooth(method="lm", formula=y~x, se=FALSE, color=col, linetype=2, linewidth=0.7) +
     geom_point(aes(size=n), shape=21, fill=scales::alpha(col,0.8), color="grey30", stroke=0.4) +
-    geom_point(data=s[s$farm==df,], shape=1, size=7, color="grey15", stroke=1.1) +
+    geom_point(data=filter(s, farm==df), shape=1, size=7, color="grey15", stroke=1.1) +
     geom_text_repel(aes(label=farm), size=3.8, seed=1, box.padding=0.6, point.padding=0.4,
                     min.segment.length=0, segment.color="grey65", segment.size=0.3,
                     bg.color="white", bg.r=0.15, max.overlaps=Inf) +

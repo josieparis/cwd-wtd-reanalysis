@@ -2,6 +2,7 @@
 # PRNP G96S and region are fixed effects; the polygenic part uses the GRM without chr13 so PRNP is not counted twice
 
 library(rrBLUP)
+library(dplyr)
 
 ## working dir
 ROOT <- "<dir>/Seabury_data/reanalysis"
@@ -13,10 +14,9 @@ bendPSD<-function(K,eps=1e-6){ e<-eigen(K,symmetric=TRUE); v<-e$values; v[v<eps]
   K2<-e$vectors%*%diag(v)%*%t(e$vectors); (K2+t(K2))/2 }
 Kall <-bendPSD(as.matrix(read.table(gzfile(file.path(S,"grm.rel.gz")))))
 Kno13<-bendPSD(as.matrix(read.table(gzfile(file.path(S,"grm_no13.rel.gz")))))
-meta<-read.delim(file.path(ROOT,"00_data/samples.tsv"),colClasses=c(clean_id="character")); rownames(meta)<-meta$clean_id; meta<-meta[ids,]
+meta<-read.delim(file.path(ROOT,"00_data/samples.tsv"),colClasses=c(clean_id="character")) %>% slice(match(ids,clean_id))
 ## PRNP genotypes (plink --recode A, see 00b_plink_2020.sh), missing set to the mean
-g96<-read.table(file.path(ROOT, "work", "prnp.raw"),header=TRUE)
-rownames(g96)<-g96$IID; g96<-g96[ids,]; G96<-g96$G96S_G_to_A_at286_A
+G96<-read.table(file.path(ROOT, "work", "prnp.raw"),header=TRUE) %>% slice(match(ids,IID)) %>% pull(G96S_G_to_A_at286_A)
 G96[is.na(G96)]<-mean(G96,na.rm=TRUE)
 South<-as.numeric(meta$region=="South"); Mid<-as.numeric(meta$region=="Midwest")
 
@@ -53,5 +53,5 @@ d1<-partition(meta$binary,"BINARY  CWD_Binary")
 d2<-partition(meta$score, "SCORE   CMS_CWDScore")
 
 ## save
-write.csv(rbind(d1,d2),file.path(S,"variance_partition.csv"),row.names=FALSE)
+write.csv(bind_rows(d1,d2),file.path(S,"variance_partition.csv"),row.names=FALSE)
 cat("\nsaved variance_partition.csv\n")

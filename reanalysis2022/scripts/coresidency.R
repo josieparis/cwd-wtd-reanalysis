@@ -9,7 +9,7 @@ setwd("<dir>/Seabury_data")
 ## helper functions
 sq     <- function(f) as.matrix(read.table(gzfile(f), sep = "\t"))
 flipS  <- function(x, reg) if (mean(x[reg == "South"]) < 0) -x else x
-relabR <- function(r) ifelse(r == "East", "Northeast", r)
+relabR <- function(r) if_else(r == "East", "Northeast", r)
 nagel  <- function(m, m0) {                                  # Nagelkerke R2
   n <- length(m$y); l0 <- as.numeric(logLik(m0)); l1 <- as.numeric(logLik(m))
   (1 - exp((2 / n) * (l0 - l1))) / (1 - exp((2 / n) * l0))
@@ -23,9 +23,9 @@ structure_block <- function(tag, pcs, region, y, ev) {
   cat(sprintf("\n================ %s ================\n", tag))
   ok <- !is.na(y) & !is.na(region)
   pc1 <- flipS(pcs[, 1], region)
+  pr <- tibble(y = y[ok], region = region[ok]) %>% group_by(region) %>% summarise(prev = mean(y))
   cat(sprintf("n with status = %d | prevalence by region: %s\n", sum(ok),
-      paste(sprintf("%s %.0f%%", names(tapply(y[ok], region[ok], mean)),
-                    100 * tapply(y[ok], region[ok], mean)), collapse = ", ")))
+      paste(sprintf("%s %.0f%%", pr$region, 100 * pr$prev), collapse = ", ")))
   cat(sprintf("PC1 = %.1f%% of variance across the top 20 PCs (%.1f%% of total GRM trace not computed here)\n",
       100 * ev[1] / sum(ev[1:20]), NA))
   a  <- summary(lm(pc1[ok] ~ region[ok]))$r.squared
@@ -36,8 +36,9 @@ structure_block <- function(tag, pcs, region, y, ev) {
   ct <- cor.test(pc1[ok], y[ok])
   cat(sprintf("PC1 ~ CWD status: point-biserial r = %.3f (r2 = %.3f), P = %.2g\n",
       ct$estimate, ct$estimate^2, ct$p.value))
-  d  <- data.frame(y = y[ok], region = relevel(factor(region[ok]), ref = "South"), pcs[ok, 1:10])
-  pcn <- paste0("PC", 1:10); names(d)[3:12] <- pcn
+  pcn <- paste0("PC", 1:10)
+  d  <- data.frame(y = y[ok], region = relevel(factor(region[ok]), ref = "South"), pcs[ok, 1:10]) %>%
+    rename_with(~ pcn, 3:12)
   m0 <- glm(y ~ 1, binomial, d); mR <- glm(y ~ region, binomial, d)
   mP <- glm(reformulate(pcn, "y"), binomial, d); mRP <- glm(reformulate(c("region", pcn), "y"), binomial, d)
   cat(sprintf("Logistic, region only        : Nagelkerke R2 = %.3f | Midwest vs South %s | Northeast vs South %s\n",

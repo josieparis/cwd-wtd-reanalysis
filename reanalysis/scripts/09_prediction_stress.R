@@ -4,6 +4,7 @@
 
 library(rrBLUP)
 library(pROC)
+library(dplyr)
 
 ## working dir
 ROOT <- "<dir>/Seabury_data/reanalysis"
@@ -14,16 +15,16 @@ auc <- function(y,p) as.numeric(pROC::auc(response=y, predictor=p, quiet=TRUE, l
 ids <- read.table(file.path(S,"grm.rel.id"))[,1]; n <- length(ids)
 K <- as.matrix(read.table(gzfile(file.path(S,"grm.rel.gz")))); dimnames(K) <- list(ids,ids)
 Kd <- K + diag(1e-4,n)
-meta <- read.delim(file.path(ROOT,"00_data/samples.tsv"), colClasses=c(clean_id="character"))
-rownames(meta) <- meta$clean_id; meta <- meta[ids,]
+meta <- read.delim(file.path(ROOT,"00_data/samples.tsv"), colClasses=c(clean_id="character")) %>%
+  slice(match(ids, clean_id))
 y <- meta$binary; region <- meta$region
 ## PRNP genotypes (plink --recode A, see 00b_plink_2020.sh)
-g96 <- read.table(file.path(ROOT, "work", "prnp.raw"), header=TRUE)
-rownames(g96) <- g96$IID; g96 <- g96[ids,]; G96 <- g96$G96S_G_to_A_at286_A
+G96 <- read.table(file.path(ROOT, "work", "prnp.raw"), header=TRUE) %>%
+  slice(match(ids, IID)) %>% pull(G96S_G_to_A_at286_A)
 
 ## GBLUP prediction of the test animals
 gblup_pred <- function(train_idx, test_idx, yy){
-  df <- data.frame(gid=ids, yv=yy); df$yv[test_idx] <- NA
+  df <- data.frame(gid=ids, yv=yy) %>% mutate(yv = replace(yv, test_idx, NA))
   kin.blup(data=df, geno="gid", pheno="yv", K=Kd)$g[test_idx]
 }
 
@@ -56,11 +57,12 @@ for(r in c("South","Midwest","East")){
 }
 
 ## D: PRNP G96S only (5-fold logistic, 30 iterations)
+dd <- data.frame(y=y, G96=G96, region=factor(region))
 av <- numeric(ITER)
 for(it in 1:ITER){
   fold <- sample(rep(1:Kfold,length.out=n)); pr <- rep(NA,n)
   for(k in 1:Kfold){ te<-which(fold==k); tr<-which(fold!=k)
-    m<-glm(y[tr]~G96[tr],family=binomial); pr[te]<-predict(m,data.frame(G96=G96[te]),type="response") }
+    m<-glm(y~G96,family=binomial,data=dd[tr,]); pr[te]<-predict(m,dd[te,],type="response") }
   av[it]<-auc(y,pr)
 }
 cat(sprintf("\nD) PRNP G96S-only predictor AUC = %.3f (sd %.3f)\n", mean(av), sd(av)))
@@ -80,8 +82,8 @@ af <- numeric(ITER)
 for(it in 1:ITER){
   fold <- sample(rep(1:Kfold,length.out=n)); pr <- rep(NA,n)
   for(k in 1:Kfold){ te<-which(fold==k); tr<-which(fold!=k)
-    m<-glm(y[tr]~G96[tr]+factor(region[tr]),family=binomial)
-    pr[te]<-predict(m,data.frame(`G96[tr]`=G96[te],`region[tr]`=region[te],check.names=FALSE),type="response") }
+    m<-glm(y~G96+region,family=binomial,data=dd[tr,])
+    pr[te]<-predict(m,dd[te,],type="response") }
   af[it]<-auc(y,pr)
 }
 cat(sprintf("F) PRNP + region predictor AUC = %.3f (sd %.3f)\n", mean(af), sd(af)))

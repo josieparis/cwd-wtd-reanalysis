@@ -4,6 +4,7 @@
 
 library(ggplot2)
 library(scales)
+library(dplyr)
 
 ## working dir
 setwd("<dir>/Seabury_data")
@@ -16,9 +17,10 @@ mx <- read.csv("reanalysis2022/data/figS1_max_per_animal.csv")$maxconc
 THR <- 0.90
 nmatch <- sum(mx >= THR); ntot <- length(mx)
 
-hb <- subset(h, count > 0)
-hb$grp <- factor(ifelse(hb$mid >= THR, "same animal (IBS ≥ 0.90)", "distinct animals"),
-                 levels = c("distinct animals", "same animal (IBS ≥ 0.90)"))
+hb <- h %>%
+  filter(count > 0) %>%
+  mutate(grp = factor(if_else(mid >= THR, "same animal (IBS ≥ 0.90)", "distinct animals"),
+                      levels = c("distinct animals", "same animal (IBS ≥ 0.90)")))
 YMAX <- max(hb$count)
 ay   <- 10^(0.66 * log10(YMAX))          # annotation height on the log axis
 

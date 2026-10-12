@@ -4,6 +4,7 @@
 
 library(rrBLUP)
 library(pROC)
+library(dplyr)
 
 ## working dir
 ROOT <- "<dir>/Seabury_data/reanalysis"
@@ -12,7 +13,7 @@ S<-file.path(ROOT,"01_structure")
 ## read in GRM and phenotypes
 ids<-read.table(file.path(S,"grm.rel.id"))[,1]; n<-length(ids)
 K<-as.matrix(read.table(gzfile(file.path(S,"grm.rel.gz")))); dimnames(K)<-list(ids,ids); K<-K+diag(1e-4,n)
-meta<-read.delim(file.path(ROOT,"00_data/samples.tsv"),colClasses=c(clean_id="character")); rownames(meta)<-meta$clean_id; meta<-meta[ids,]
+meta<-read.delim(file.path(ROOT,"00_data/samples.tsv"),colClasses=c(clean_id="character")) %>% slice(match(ids,clean_id))
 y<-meta$binary
 
 ## fixed effects: intercept only, or intercept + sex + age + region
@@ -34,7 +35,7 @@ one_iter<-function(Kfold,X){
   yh<-as.integer(pred>THR)
   TP<-sum(yh&y);TN<-sum(!yh&!y);FP<-sum(yh&!y);FN<-sum(!yh&y)
   sens<-TP/(TP+FN); spec<-TN/(TN+FP); acc<-(TP+TN)/n
-  den<-sqrt(as.double(TP+FP)*(TP+FN)*(TN+FP)*(TN+FN)); mcc<-ifelse(den==0,0,(TP*TN-FP*FN)/den)
+  den<-sqrt(as.double(TP+FP)*(TP+FN)*(TN+FP)*(TN+FN)); mcc<-if_else(den==0,0,(TP*TN-FP*FN)/den)
   c(AUC=as.numeric(pROC::auc(y,pred,quiet=TRUE,levels=c(0,1),direction="<")),
     MCC=mcc,Accuracy=acc,Sensitivity=sens,Specificity=spec,RMSE=sqrt(mean((pred-y)^2)))
 }
@@ -53,7 +54,7 @@ for(cf in cfgs){
 }
 
 ## save
-write.csv(do.call(rbind,out),file.path(S,"table1_reproduction.csv"),row.names=FALSE)
+write.csv(bind_rows(out),file.path(S,"table1_reproduction.csv"),row.names=FALSE)
 
 ## values reported in Seabury Table 1
 cat("\nSeabury Table 1 (reported):\n")

@@ -2,6 +2,8 @@
 # S1 APHIS-VS funding for CWD predictive genetics 2021-2025, S2 the 2020 and 2022 datasets,
 # S3 naive and 10-PC association scans, S4 reproduction of the GBLUP accuracy in Seabury et al. (2020) Table 1
 
+library(dplyr)
+
 ## working dir
 setwd("<dir>/Seabury_data")
 
@@ -27,28 +29,29 @@ s1 <- data.frame(Year = c("2021", "2022", "2023", "2024", "2025*"),
                  org  = c("State Ag (4)", "State Ag (4)", "State Ag (8); Univ (1)",
                           "State Ag (15); Univ (1)", "State Ag (16); Univ (1)"))
 stopifnot(isTRUE(all.equal(sum(s1$pg), 10734797.99)))           # the source's total
-S1 <- rbind(data.frame(Year = s1$Year, `Predictive-genetics funding` = usd(s1$pg),
-                       `Total funding` = usd(s1$tot), `Percent of total` = sprintf("%.0f%%", 100 * s1$pg / s1$tot),
-                       `Organizations awarded` = s1$org, check.names = FALSE),
-            data.frame(Year = "Total", `Predictive-genetics funding` = usd(sum(s1$pg)),
-                       `Total funding` = usd(sum(s1$tot)), `Percent of total` = sprintf("%.0f%%", 100 * sum(s1$pg) / sum(s1$tot)),
-                       `Organizations awarded` = "—", check.names = FALSE))
+S1 <- bind_rows(
+  s1 %>% transmute(Year, `Predictive-genetics funding` = usd(pg),
+                   `Total funding` = usd(tot), `Percent of total` = sprintf("%.0f%%", 100 * pg / tot),
+                   `Organizations awarded` = org),
+  s1 %>% summarise(Year = "Total", `Predictive-genetics funding` = usd(sum(pg)),
+                   `Total funding` = usd(sum(tot)), `Percent of total` = sprintf("%.0f%%", 100 * sum(pg) / sum(tot)),
+                   `Organizations awarded` = "—"))
 wr(S1, "tableS1_aphis_funding.csv")
 
 ## S2: the two datasets
 s20 <- read.delim("reanalysis/00_data/samples.tsv", stringsAsFactors = FALSE)
-c22 <- read.csv("reanalysis2022/data/cov_1170.csv", stringsAsFactors = FALSE)
-c22$cwd <- suppressWarnings(as.numeric(c22$binary)); c22$sexn <- suppressWarnings(as.numeric(c22$sex))
-k22 <- c22[!is.na(c22$cwd), ]
-relab <- function(r) ifelse(r == "East", "Northeast", r)
+c22 <- read.csv("reanalysis2022/data/cov_1170.csv", stringsAsFactors = FALSE) %>%
+  mutate(cwd = suppressWarnings(as.numeric(binary)), sexn = suppressWarnings(as.numeric(sex)))
+k22 <- c22 %>% filter(!is.na(cwd))
+relab <- function(r) if_else(r == "East", "Northeast", r)
 REG <- c("Northeast", "Midwest", "South")
 rn  <- function(reg) paste(as.integer(table(factor(relab(reg), REG))), collapse = " / ")
 rp  <- function(reg, y) paste(sprintf("%.2f", tapply(y, factor(relab(reg), REG), mean)), collapse = " / ")
-tb  <- table(k22$farm); big <- names(tb)[tb >= 10]
-both <- tapply(k22$cwd, k22$farm, function(v) length(unique(v)) > 1)
-cc22 <- k22[!is.na(k22$sexn) & !is.na(k22$age), ]
+fm22 <- k22 %>% group_by(farm) %>% summarise(n = n(), both = n_distinct(cwd) > 1)   # deer per farm; both = has cases and controls
+big  <- fm22 %>% filter(n >= 10) %>% pull(farm)
+cc22 <- k22 %>% filter(!is.na(sexn), !is.na(age))
 n_f10  <- sum(cc22$farm %in% big)
-n_f10b <- sum(cc22$farm %in% names(tb)[tb >= 10 & both[names(tb)]])
+n_f10b <- sum(cc22$farm %in% (fm22 %>% filter(n >= 10, both) %>% pull(farm)))
 nbim   <- function(f) length(readLines(f))
 auto20 <- sum(read.table("reanalysis/00_data/deer.bim")$V1 %in% 1:29)          # GRM set (grm.log)
 assoc20 <- nbim("reanalysis/02_assoc/deer_bin.bim")                            # MAF >= 0.05 association set
@@ -72,7 +75,7 @@ S2 <- data.frame(check.names = FALSE,
   `2022 dataset` = c("Seabury et al. 2022, G3 12:jkac109", "doi:10.5061/dryad.wh70rxwnt",
           sprintf("%s (%s deposited)", f0(nrow(k22)), f0(nrow(c22))),
           paste(sum(k22$cwd == 1), "/", sum(k22$cwd == 0)), sprintf("%.3f", mean(k22$cwd)), "no",
-          "sex, age, region, farm", sprintf("%d (%d with ≥ 10 deer)", length(tb), length(big)),
+          "sex, age, region, farm", sprintf("%d (%d with ≥ 10 deer)", nrow(fm22), length(big)),
           rn(k22$region), rp(k22$region, k22$cwd),
           sprintf("%s (no covariates); %s (complete sex and age); %s (farm models: farms with ≥ 10 deer); %s (GxEMM and LDAK-PCGC: farms with ≥ 10 deer and both cases and controls)",
                   f0(nrow(k22)), f0(nrow(cc22)), f0(n_f10), f0(n_f10b)),
@@ -108,7 +111,7 @@ orig <- rbind(                                               # as reported in Se
   "k=5  Sex,Age,Region" = c(AUC = .8542, Accuracy = .8159, Sensitivity = .6716, Specificity = .8942, MCC = .5870, RMSE = .3734))
 S4 <- NULL; dmax <- 0
 for (cf in rownames(orig)) {
-  r <- rep[rep$config == cf, ]; m <- setNames(r$mean, r$metric)[MET]; s <- setNames(r$sd, r$metric)[MET]
+  r <- rep %>% filter(config == cf); m <- setNames(r$mean, r$metric)[MET]; s <- setNames(r$sd, r$metric)[MET]
   dmax <- max(dmax, abs(m - orig[cf, MET]))
   k <- sub("k=([0-9]).*", "\\1", cf); cv <- if (grepl("None", cf)) "none" else "sex, age, region"
   S4 <- rbind(S4,

@@ -4,6 +4,7 @@
 
 library(rrBLUP)
 library(pROC)
+library(dplyr)
 
 ## working dir
 ROOT <- "<dir>/Seabury_data/reanalysis"
@@ -18,8 +19,8 @@ dimnames(K) <- list(ids, ids)
 K <- K + diag(1e-4, n)
 
 ## phenotypes
-meta <- read.delim(file.path(ROOT,"00_data/samples.tsv"), colClasses=c(clean_id="character"))
-rownames(meta) <- meta$clean_id; meta <- meta[ids,]
+meta <- read.delim(file.path(ROOT,"00_data/samples.tsv"), colClasses=c(clean_id="character")) %>%
+  slice(match(ids, clean_id))
 ybin <- meta$binary; yscr <- meta$score
 
 set.seed(20200304)
@@ -31,8 +32,7 @@ cv_once <- function(y, is_binary){
   pred <- rep(NA_real_, n)
   for(k in 1:Kfold){
     test <- which(fold==k)
-    df <- data.frame(gid=ids, yy=y)
-    df$yy[test] <- NA
+    df <- data.frame(gid=ids, yy=y) %>% mutate(yy = replace(yy, test, NA))
     fit <- kin.blup(data=df, geno="gid", pheno="yy", K=K)
     pred[test] <- fit$g[test]
   }

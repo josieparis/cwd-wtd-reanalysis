@@ -14,7 +14,7 @@ setwd("<dir>/Seabury_data")
 regcol  <- c(Northeast="#8E6BB1", Midwest="#F2A03E", South="#1CA089")
 fillcol <- setNames(scales::alpha(regcol, 0.8), names(regcol))
 statcol <- c("CWD-"="grey60", "CWD+"="#B2182B")                 # control / case
-relabR <- function(r) ifelse(r=="East","Northeast",r)
+relabR <- function(r) if_else(r=="East","Northeast",r)
 relabF <- function(f) gsub("East","Northeast",f)
 sq     <- function(f) as.matrix(read.table(gzfile(f), sep="\t"))
 crel   <- function(K,thr){ diag(K)<-0; 100*mean(rowSums(K>=thr)>=1) }
@@ -26,21 +26,23 @@ th <- theme_classic(base_size=16, base_family="Arial") +
         axis.text=element_text(colour="black"))
 
 ## a: PCA and PC1 density by CWD status
-p20 <- read.delim("reanalysis/01_structure/pca_merged.tsv", check.names=FALSE, stringsAsFactors=FALSE)
+p20 <- read.delim("reanalysis/01_structure/pca_merged.tsv", check.names=FALSE, stringsAsFactors=FALSE) %>%
+  mutate(region=factor(relabR(region), levels=names(regcol)),
+         PC1=flipS(PC1, as.character(region)),
+         binary=suppressWarnings(as.numeric(binary)))
 ev20 <- scan("reanalysis/01_structure/pca.eigenval", quiet=TRUE); v20 <- 100*ev20/sum(ev20[1:20])
-p20$region <- factor(relabR(p20$region), levels=names(regcol))
-p20$PC1 <- flipS(p20$PC1, as.character(p20$region))
-p20$binary <- suppressWarnings(as.numeric(p20$binary))
 pe <- read.table("reanalysis2022/01_structure/pca2022.eigenvec", stringsAsFactors=FALSE)
 ev22 <- scan("reanalysis2022/01_structure/pca2022.eigenval", quiet=TRUE); v22 <- 100*ev22/sum(ev22[1:20])
-cov <- read.csv("reanalysis2022/data/cov_1170.csv", stringsAsFactors=FALSE); cov$binary <- as.numeric(cov$binary)
-r22 <- relabR(cov$region[match(pe$V2, cov$CMSID)])
-d22 <- data.frame(PC1=pe$V3, PC2=pe$V4, region=factor(r22, levels=names(regcol)),
-                  binary=as.numeric(cov$binary[match(pe$V2, cov$CMSID)]))
-d22$PC1 <- flipS(d22$PC1, as.character(d22$region))
+cov <- read.csv("reanalysis2022/data/cov_1170.csv", stringsAsFactors=FALSE) %>% mutate(binary=as.numeric(binary))
+d22 <- pe %>% select(CMSID=V2, PC1=V3, PC2=V4) %>%
+  left_join(cov %>% select(CMSID, region, binary), by="CMSID") %>%
+  mutate(region=factor(relabR(region), levels=names(regcol)),
+         PC1=flipS(PC1, as.character(region))) %>%
+  select(PC1, PC2, region, binary)
 
 ## same PC1 range for the scatter and the density plot, with room for the region labels
-xrng <- function(df){ g<-mean(df$PC1); e<-g+(tapply(df$PC1,df$region,median)-g)*2.2
+xrng <- function(df){ g<-mean(df$PC1)
+  e <- df %>% group_by(region) %>% summarise(e=g+(median(PC1)-g)*2.2) %>% pull(e)
   r<-range(c(df$PC1,e),na.rm=TRUE); r+c(-1,1)*diff(r)*0.08 }
 xr20 <- xrng(p20); xr22 <- xrng(d22)
 
@@ -59,8 +61,8 @@ pca_scatter <- function(df, v, ttl, xr){
     theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
 }
 pc1_density <- function(df, v, xr){                              # PC1 by CWD status
-  df <- df[!is.na(df$binary),]
-  df$status <- factor(ifelse(df$binary==1,"CWD+","CWD-"), levels=c("CWD-","CWD+"))
+  df <- df %>% filter(!is.na(binary)) %>%
+    mutate(status=factor(if_else(binary==1,"CWD+","CWD-"), levels=c("CWD-","CWD+")))
   rv  <- cor(df$PC1, df$binary)                                 # point-biserial r
   mus <- df %>% group_by(status) %>% summarise(m=mean(PC1), .groups="drop")
   ggplot(df, aes(PC1, fill=status, color=status)) +
@@ -89,7 +91,7 @@ BRK <- seq(-0.20, 1.12, by=0.01)
 mkh <- function(off){ h<-hist(off, breaks=BRK, plot=FALSE); data.frame(mid=h$mids, count=h$counts) }
 h20 <- mkh(off20); h22 <- mkh(off22); YMAX <- max(h20$count, h22$count)*1.4
 rel_panel <- function(hd, fd, cr, ttl){
-  ggplot(hd[hd$count>0,], aes(mid, count)) +
+  ggplot(filter(hd, count>0), aes(mid, count)) +
     annotate("rect", xmin=0.4, xmax=1.10, ymin=0.5, ymax=Inf, fill="#fdd0d0", alpha=0.5) +
     geom_segment(aes(xend=mid, y=0.5, yend=count), color="grey35", linewidth=0.5) +
     geom_vline(xintercept=0.2, linetype=2, color="#e08214", linewidth=0.7) +
@@ -105,12 +107,12 @@ farm22 <- cov$farm[match(id22, cov$CMSID)]
 same   <- outer(farm22, farm22, "==")[lower.tri(G22)]; same[is.na(same)] <- FALSE
 hw <- mkh(off22[ same]); hb <- mkh(off22[!same])            # within / between counts per bin
 h22c <- data.frame(mid=hw$mid, count=hw$count + hb$count,   # one bar per bin, coloured by the commoner type
-                   cat=ifelse(hw$count > hb$count, "within farm", "between farm"))
-h22c$cat <- factor(h22c$cat, levels=c("between farm","within farm"))
+                   cat=if_else(hw$count > hb$count, "within farm", "between farm")) %>%
+  mutate(cat=factor(cat, levels=c("between farm","within farm")))
 FARMCOL <- c("between farm"="grey70", "within farm"="#2166AC")
 pb22 <- ggplot() +
   annotate("rect", xmin=0.4, xmax=1.10, ymin=0.5, ymax=Inf, fill="#fdd0d0", alpha=0.5) +
-  geom_segment(data=subset(h22c, count>0),
+  geom_segment(data=filter(h22c, count>0),
                aes(x=mid, xend=mid, y=0.5, yend=count, color=cat), linewidth=0.6) +
   geom_vline(xintercept=0.2, linetype=2, color="#e08214", linewidth=0.7) +
   geom_vline(xintercept=0.4, linetype=2, color="#b2182b", linewidth=0.7) +
@@ -124,15 +126,15 @@ pb22 <- ggplot() +
              legend.margin=margin(5,8,5,6))
 
 ## c: prevalence by farm
-cov$region <- relabR(cov$region); cov$farm <- relabF(cov$farm)
-cov2 <- cov %>% filter(!is.na(binary), !is.na(farm), farm!="")
+cov2 <- cov %>% mutate(region=relabR(region), farm=relabF(farm)) %>%
+  filter(!is.na(binary), !is.na(farm), farm!="")
 rmean <- cov2 %>% group_by(region) %>% summarise(m=mean(binary)*100, .groups="drop")
-lev <- rmean$region[order(rmean$m)]
+lev <- rmean %>% arrange(m) %>% pull(region)
 ag <- cov2 %>% group_by(farm, region) %>% summarise(n=n(), prev=mean(binary)*100, .groups="drop") %>%
       filter(n >= 10) %>%                                          # the 16 farms with >= 10 deer
-      mutate(region=factor(region, levels=lev)) %>% arrange(region, prev)
-ag$farm <- factor(ag$farm, levels=ag$farm)
-rmean$region <- factor(rmean$region, levels=lev)
+      mutate(region=factor(region, levels=lev)) %>% arrange(region, prev) %>%
+      mutate(farm=factor(farm, levels=farm))
+rmean <- rmean %>% mutate(region=factor(region, levels=lev))
 lab <- setNames(sprintf("%s (region mean %.0f%%)", rmean$region, rmean$m), as.character(rmean$region))
 pc <- ggplot(ag, aes(farm, prev, fill=region)) +
   geom_hline(data=rmean, aes(yintercept=m, color=region), linetype=2, linewidth=0.7, show.legend=FALSE) +

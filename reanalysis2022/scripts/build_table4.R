@@ -2,6 +2,8 @@
 # GCTA-GREML + Lee (GCTA --prevalence, no covariates) and LDAK-PCGC (GxEMM HOM model, binary = TRUE),
 # both datasets, all on the PLINK GRM
 
+library(dplyr)
+
 ## working dir
 setwd("<dir>/Seabury_data")
 
@@ -38,7 +40,7 @@ pB  <- pg(lapply(KS, function(k) fa$B_farm_adj[[paste0("liab_", k)]]$hom))
 p20 <- pg(lapply(KS, function(k) t20[[paste0("liab_hom_", k)]]))
 c807 <- read.csv("reanalysis/01_structure/cov_807.csv", stringsAsFactors = FALSE)
 num  <- function(x) suppressWarnings(as.numeric(x))
-n20p <- sum(!is.na(num(c807$binary)) & !is.na(num(c807$sex)) & !is.na(num(c807$age)))   # same filter as run_gxemm_2020.R
+n20p <- c807 %>% filter(!is.na(num(binary)), !is.na(num(sex)), !is.na(num(age))) %>% nrow()   # same filter as run_gxemm_2020.R
 
 ## build and write table
 r22 <- gl(g22); r20 <- gl(g20)

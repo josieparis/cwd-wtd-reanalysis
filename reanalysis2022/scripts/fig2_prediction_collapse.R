@@ -2,9 +2,8 @@
 # a per-farm AUC, size-matched CV vs leave-one-farm-out, b AUC by relatedness to the training set,
 # c all metrics for the three validation designs, d within vs across region prediction
 
-library(ggplot2)
+library(tidyverse)
 library(patchwork)
-library(dplyr)
 
 ## working dir
 setwd("<dir>/Seabury_data")
@@ -20,13 +19,14 @@ PR <- readRDS("reanalysis2022/data/prediction_lofo_plink.rds")$none
 
 ## a: per-farm AUC
 cv <- read.csv("reanalysis2022/data/cov_1170.csv", stringsAsFactors=FALSE)
-ycv <- suppressWarnings(as.numeric(cv$binary))
-pf <- data.frame(farm=rownames(PR$lofo), auc_lofo=PR$lofo[, "auc"], match=PR$size_matched[, "auc"], stringsAsFactors=FALSE)
-pf$n <- sapply(pf$farm, function(f) sum(cv$farm == f & !is.na(ycv)))
-pf$farm <- gsub("East","Northeast",pf$farm)
-pf <- pf[order(pf$n),]; pf$lab <- factor(sprintf("%s (n=%d)", pf$farm, pf$n), levels=sprintf("%s (n=%d)", pf$farm, pf$n))
-pfl <- rbind(data.frame(lab=pf$lab, auc=pf$auc_lofo, design="leave-one-farm-out"),
-             data.frame(lab=pf$lab, auc=pf$match,    design="sample size-matched CV"))
+nf <- cv %>% mutate(ycv=suppressWarnings(as.numeric(binary))) %>% filter(!is.na(ycv)) %>% count(farm)   # deer with CWD status per farm
+pf <- data.frame(farm=rownames(PR$lofo), auc_lofo=PR$lofo[, "auc"], match=PR$size_matched[, "auc"], stringsAsFactors=FALSE) %>%
+  left_join(nf, by="farm") %>%
+  mutate(farm=gsub("East","Northeast",farm)) %>%
+  arrange(n) %>%
+  mutate(lab=sprintf("%s (n=%d)", farm, n), lab=factor(lab, levels=lab))
+pfl <- pf %>% select(lab, `leave-one-farm-out`=auc_lofo, `sample size-matched CV`=match) %>%
+  pivot_longer(-lab, names_to="design", values_to="auc", cols_vary="slowest")
 pa <- ggplot() +
   annotate("rect", xmin=-Inf, xmax=0.5, ymin=-Inf, ymax=Inf, fill="grey92") +
   geom_segment(data=pf, aes(x=auc_lofo, xend=match, y=lab, yend=lab), color="grey70", linewidth=1) +
@@ -38,10 +38,11 @@ pa <- ggplot() +
   TH + theme(legend.position="top", legend.justification="left")
 
 ## b: AUC by the test deer's closest relative in the training set (random 5-fold, relatedness_binned_auc.R)
-rb <- read.csv("reanalysis2022/data/relatedness_binned_auc.csv", stringsAsFactors=FALSE)
-rb$pct <- rb$n / sum(rb$n) * 100; rb$ndeer <- round(rb$n / 10)     # deer per CV replicate (10 replicates)
-deg <- gsub("-", "–", sub(" deg$", " degree", rb$degree))           # e.g. 1st-2nd degree, with an en dash
-xl <- sprintf("%s\n(%s)", deg, gsub("-", "–", rb$bin)); rb$xlab <- factor(xl, levels=xl)        # GRM range under each label
+rb <- read.csv("reanalysis2022/data/relatedness_binned_auc.csv", stringsAsFactors=FALSE) %>%
+  mutate(pct=n / sum(n) * 100, ndeer=round(n / 10),                # deer per CV replicate (10 replicates)
+         deg=gsub("-", "–", sub(" deg$", " degree", degree)),      # e.g. 1st-2nd degree, with an en dash
+         xlab=sprintf("%s\n(%s)", deg, gsub("-", "–", bin)),       # GRM range under each label
+         xlab=factor(xlab, levels=xlab))
 pb <- ggplot(rb, aes(xlab, auc)) +
   geom_hline(yintercept=0.5, linetype=2, color="grey45") +
   geom_col(fill=CMATCH, color=CMATCH, alpha=0.75, linewidth=0.5, width=0.7, na.rm=TRUE) +   # same style as c and d
@@ -55,9 +56,9 @@ pb <- ggplot(rb, aes(xlab, auc)) +
 
 ## c: all metrics for the three validation designs
 des <- c(random_5fold="random 5-fold", size_matched="sample size-matched", lofo="leave-one-farm-out")
-lc <- do.call(rbind, lapply(names(des), function(d) { m <- PR[[d]]          # folds (5-fold) or held-out farms (others)
-  data.frame(metric=colnames(m), design=des[d], value=colMeans(m, na.rm=TRUE), sd=apply(m, 2, sd, na.rm=TRUE)) }))
-lc$metric <- factor(mlab[lc$metric], levels=mlab); lc$design <- factor(lc$design, levels=des)
+lc <- map_dfr(names(des), function(d) { m <- PR[[d]]          # folds (5-fold) or held-out farms (others)
+  data.frame(metric=colnames(m), design=des[d], value=colMeans(m, na.rm=TRUE), sd=apply(m, 2, sd, na.rm=TRUE)) }) %>%
+  mutate(metric=factor(mlab[metric], levels=mlab), design=factor(design, levels=des))
 pc <- ggplot(lc, aes(metric, value, fill=design, color=design)) +
   geom_hline(yintercept=c(0,0.5), linetype=c(1,2), color=c("grey30","grey55")) +
   geom_col(position=position_dodge(0.8), width=0.72, linewidth=0.5, alpha=0.75) +   # border = bar colour, translucent fill
@@ -70,9 +71,10 @@ pc <- ggplot(lc, aes(metric, value, fill=design, color=design)) +
 ## d: within vs across region (within_vs_across_region.R)
 wr <- read.csv("reanalysis2022/data/within_vs_across_region_summary.csv", stringsAsFactors=FALSE)
 ser <- c(within_region="within region", across_region="across region", across_region_plusPC="across region + PCs")
-ld <- do.call(rbind, lapply(names(ser), function(s)
-  data.frame(metric=wr$metric, series=ser[s], value=num(wr[[s]]), sd=sdv(wr[[s]]))))
-ld$metric <- factor(mlab[ld$metric], levels=mlab); ld$series <- factor(ld$series, levels=ser)
+ld <- wr %>%
+  pivot_longer(all_of(names(ser)), names_to="series", values_to="ms", cols_vary="slowest") %>%
+  transmute(metric=factor(mlab[metric], levels=mlab), series=factor(ser[series], levels=ser),
+            value=num(ms), sd=sdv(ms))
 pd <- ggplot(ld, aes(metric, value, fill=series, color=series)) +
   geom_hline(yintercept=c(0,0.5), linetype=c(1,2), color=c("grey30","grey55")) +
   geom_col(position=position_dodge(0.8), width=0.72, linewidth=0.5, alpha=0.75) +   # border = bar colour, translucent fill

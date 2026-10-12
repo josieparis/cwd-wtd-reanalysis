@@ -3,6 +3,7 @@
 # writes reanalysis2022/data/relatedness_binned_auc.csv
 
 library(rrBLUP)
+library(dplyr)
 
 ## working dir
 setwd("<dir>/Seabury_data")
@@ -37,10 +38,10 @@ for(it in 1:ITER){
 brk <- c(-Inf,0.05,0.125,0.25,Inf)
 lab <- c("< 0.05","0.05-0.125","0.125-0.25","> 0.25")
 deg <- c("unrelated","3rd-4th deg","2nd-3rd deg","1st-2nd deg")
-bin <- cut(mr, brk, labels=lab)
-out <- do.call(rbind, lapply(seq_along(lab), function(i){ m <- bin==lab[i]
-  data.frame(bin=lab[i], degree=deg[i], n=sum(m), prev=round(mean(yt[m]),3),
-             auc=if(sum(m)>20) round(auc(yt[m],pred[m]),3) else NA) }))
+out <- data.frame(bin=cut(mr, brk, labels=lab), yt, pred) %>%
+  group_by(bin, .drop=FALSE) %>%                                       # keep empty bins
+  summarise(n=n(), prev=round(mean(yt),3), auc=if(n>20) round(auc(yt,pred),3) else NA, .groups="drop") %>%
+  mutate(bin=as.character(bin), degree=deg[match(bin, lab)], .after=bin) %>% as.data.frame()
 
 ## write table
 write.csv(out, "reanalysis2022/data/relatedness_binned_auc.csv", row.names=FALSE)
