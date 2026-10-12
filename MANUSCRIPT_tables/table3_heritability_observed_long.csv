@@ -1,0 +1,33 @@
+"cohort","trait","covset","tool","n","h2","se"
+"2020","Binary","none","Original (EMMAX)",807,0.636602,0.0699616
+"2020","Binary","none","GCTA",807,0.615496,0.070029
+"2020","Binary","none","GEMMA",807,0.625559,0.0662946
+"2020","Binary","none","rrBLUP",807,0.615502662166421,0.0735320554270013
+"2020","Binary","+ sex/age/region","Original (EMMAX)",807,0.545876,0.0761631
+"2020","Binary","+ sex/age/region","GCTA",807,0.5265,0.07552
+"2020","Binary","+ sex/age/region","GEMMA",807,0.537139,0.0739439
+"2020","Binary","+ sex/age/region","rrBLUP",807,0.526496808113728,0.0769750822243758
+"2020","Binary","+ sex/age/region + tissue-score †","Original (EMMAX)",807,0.33666,0.0787698
+"2020","Binary","+ sex/age/region + tissue-score †","GCTA",807,0.336061,0.077476
+"2020","Binary","+ sex/age/region + tissue-score †","GEMMA",807,0.34566,0.0789274
+"2020","Binary","+ sex/age/region + tissue-score †","rrBLUP",807,0.336059338656818,0.0770963410703776
+"2020","Score","none","Original (EMMAX)",807,0.589015,0.0694558
+"2020","Score","none","GCTA",807,0.574224,0.069346
+"2020","Score","none","GEMMA",807,0.584642,0.0643767
+"2020","Score","none","rrBLUP",807,0.574223481091001,0.0749795257970897
+"2020","Score","+ sex/age/region","Original (EMMAX)",807,0.51482,0.074946
+"2020","Score","+ sex/age/region","GCTA",807,0.501262,0.07423
+"2020","Score","+ sex/age/region","GEMMA",807,0.511943,0.0713285
+"2020","Score","+ sex/age/region","rrBLUP",807,0.501262213970185,0.0774657244334128
+"2022","Binary","none","Original (EMMAX)",1170,0.611,0.056
+"2022","Binary","none","GCTA",1170,0.593129,0.056438
+"2022","Binary","none","GEMMA",1170,0.606953,0.0539036
+"2022","Binary","none","rrBLUP",1170,0.593130563345661,0.0592313923911031
+"2022","Binary","+ sex/age/region","Original (EMMAX)",1166,0.564,0.059
+"2022","Binary","+ sex/age/region","GCTA",1166,0.550207,0.058929
+"2022","Binary","+ sex/age/region","GEMMA",1166,0.563235,0.0571669
+"2022","Binary","+ sex/age/region","rrBLUP",1166,0.550207108464155,0.0610644977309834
+"2022","Binary","+ sex/age/farm","Original (EMMAX)",1151,0.329,0.067
+"2022","Binary","+ sex/age/farm","GCTA",1151,0.320424,0.065383
+"2022","Binary","+ sex/age/farm","GEMMA",1151,0.328707,0.0680746
+"2022","Binary","+ sex/age/farm","rrBLUP",1151,0.320423598723204,0.0641775907671652

@@ -1,0 +1,7 @@
+"Estimator","Dataset","Source","Covariates","n","K = 0.05","K = 0.10","K = 0.26"
+"GCTA-GREML + Lee","2022","Seabury et al. 2022","not stated","1,170","0.557 ± 0.053","n.r.","n.r."
+"GCTA-GREML + Lee","2022","this study","none","1,170","0.551 ± 0.052","0.684 ± 0.065","0.915 ± 0.087"
+"GCTA-GREML + Lee","2020","this study","none","807","0.572 ± 0.065","0.710 ± 0.081","0.949 ± 0.108"
+"LDAK-PCGC","2022","this study","region + sex + age","1,120","0.836 ± 0.026","1.033 ± 0.006†§","1.402 ± 0.102†"
+"LDAK-PCGC","2022","this study","farm + sex + age","1,120","0.400 ± 0.073","0.503 ± 0.078","0.710 ± 0.070"
+"LDAK-PCGC","2020","this study","region + sex + age","807","1.108 ± 0.028†","1.340 ± 0.107†","1.691 ± 0.268†"

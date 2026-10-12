@@ -1,0 +1,48 @@
+# Data and regenerable intermediates (genotypes come from the Dryad deposits; see README)
+doi_10_5061_dryad_*/
+doi_10_5061_dryad_*.zip
+work/
+**/work/
+**/data/
+*.bed
+*.bim
+*.fam
+*.ped
+*.map
+*.raw
+*.tped
+*.tfam
+*.bimbam
+*.bimbam.gz
+*.rel
+*.rel.gz
+*.rel.id
+*.grm.*
+*.eigenval
+*.eigenvec
+*.bin
+*.npy
+*.rds
+*.RData
+*.mlma
+*.hsq
+*.assoc.txt
+*.tsv
+*.tsv.gz
+*.xlsx
+# third-party binaries and packages (see cluster_gxemm/README_CLUSTER.md)
+ldak*.linux
+*.tar.gz
+# logs and figure outputs
+*.log
+*.log.txt
+*.out
+*.err
+slurm-*.out
+Figures/*.png
+# R / Python / OS
+.Rhistory
+.Rproj.user/
+__pycache__/
+*.pyc
+.DS_Store
